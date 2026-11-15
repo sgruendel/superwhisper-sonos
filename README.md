@@ -110,6 +110,15 @@ To disable the integration and restore outstanding changes:
 systemctl --user disable --now superwhisper-sonos
 ```
 
+To remove the service and binary, restoring outstanding changes first:
+
+```sh
+make uninstall
+```
+
+It keeps your config and the state directory. If a speaker is unreachable,
+it keeps the binary and asks you to run `--restore` later.
+
 To restore a pending journal manually after stopping the service:
 
 ```sh

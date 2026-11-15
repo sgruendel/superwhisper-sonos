@@ -1,7 +1,7 @@
 GO ?= go
 GOFMT ?= gofmt
 
-.PHONY: build test check install clean
+.PHONY: build test check install uninstall clean
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -o bin/superwhisper-sonos .
@@ -15,6 +15,9 @@ check:
 
 install: build
 	bash scripts/install.sh
+
+uninstall:
+	bash scripts/uninstall.sh
 
 clean:
 	rm -f bin/superwhisper-sonos
