@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -62,9 +63,24 @@ func (c *whisperSocket) call(ctx context.Context, command string, out any) error
 		return fmt.Errorf("Superwhisper returned no object")
 	}
 	if message := envelope["error"]; len(message) > 0 && string(message) != "null" {
-		return fmt.Errorf("Superwhisper rejected %s", command)
+		return fmt.Errorf("Superwhisper rejected %s: %s", command, errorText(message))
 	}
 	return json.Unmarshal(line, out)
+}
+
+// errorText returns Superwhisper's error message, shortened for the log.
+// Superwhisper sends a string; anything else is shown as raw JSON.
+func errorText(raw jsontext.Value) string {
+	var text string
+	if json.Unmarshal(raw, &text) != nil {
+		text = string(raw)
+	}
+	const limit = 200
+	if len(text) > limit {
+		// Drop a multi-byte character cut in half by the limit.
+		text = strings.ToValidUTF8(text[:limit], "") + "…"
+	}
+	return text
 }
 
 func (c *whisperSocket) Status(ctx context.Context) (whisperStatus, error) {

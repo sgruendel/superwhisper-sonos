@@ -93,6 +93,21 @@ func TestWhisperRejectsMalformedReplies(t *testing.T) {
 	}
 }
 
+func TestWhisperErrorsIncludeMessage(t *testing.T) {
+	long := "x" + strings.Repeat("ü", 150) // the 200-byte limit splits a "ü"
+	for response, want := range map[string]string{
+		"{\"error\":\"Unknown command\"}\n": "Superwhisper rejected status: Unknown command",
+		"{\"error\":{\"code\":42}}\n":       `Superwhisper rejected status: {"code":42}`,
+		"{\"error\":\"" + long + "\"}\n":    "Superwhisper rejected status: x" + strings.Repeat("ü", 99) + "…",
+	} {
+		path := testWhisperSocket(t, func(string) string { return response })
+		_, err := (&whisperSocket{path}).Status(context.Background())
+		if err == nil || err.Error() != want {
+			t.Errorf("got %v; want %q", err, want)
+		}
+	}
+}
+
 func TestWhisperSocketRespectsCancellation(t *testing.T) {
 	path := testWhisperSocket(t, func(string) string { return "wait" })
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
