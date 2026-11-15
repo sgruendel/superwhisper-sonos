@@ -10,15 +10,48 @@ import (
 	"path/filepath"
 )
 
+// actionKind is what the bridge changed on a Sonos group.
+//
+//go:generate go tool stringer -type=actionKind -linecomment
+type actionKind int
+
+// Each line comment is the kind's value in the recovery journal.
+const (
+	kindUnknown actionKind = iota // unknown
+	kindPause                     // pause
+	kindVolume                    // volume
+	kindMute                      // mute
+)
+
+// kindFromText maps a journal value to its kind; anything else is kindUnknown,
+// which load rejects.
+func kindFromText(text string) actionKind {
+	for k := kindPause; k <= kindMute; k++ {
+		if k.String() == text {
+			return k
+		}
+	}
+	return kindUnknown
+}
+
+func (k actionKind) MarshalText() ([]byte, error) {
+	return []byte(k.String()), nil
+}
+
+func (k *actionKind) UnmarshalText(text []byte) error {
+	*k = kindFromText(string(text))
+	return nil
+}
+
 // action is one entry in the on-disk recovery journal.
 type action struct {
-	IP   string `json:"ip"`
-	UDN  string `json:"udn"`
-	Name string `json:"name"`
-	Kind string `json:"kind"`
-	URI  string `json:"uri"`
-	Old  int    `json:"old,omitzero"`
-	New  int    `json:"new,omitzero"`
+	IP   string     `json:"ip"`
+	UDN  string     `json:"udn"`
+	Name string     `json:"name"`
+	Kind actionKind `json:"kind"`
+	URI  string     `json:"uri"`
+	Old  int        `json:"old,omitzero"`
+	New  int        `json:"new,omitzero"`
 }
 
 type journal struct{ path string }
@@ -39,10 +72,10 @@ func (j journal) load() ([]action, error) {
 		return nil, errors.New("recovery journal must be an array")
 	}
 	for _, a := range actions {
-		if net.ParseIP(a.IP) == nil || a.UDN == "" || (a.Kind != "pause" && a.Kind != "volume" && a.Kind != "mute") {
+		if net.ParseIP(a.IP) == nil || a.UDN == "" || a.Kind == kindUnknown {
 			return nil, errors.New("recovery journal contains an invalid action")
 		}
-		if a.Kind == "volume" && (a.New < 1 || a.Old <= a.New || a.Old > 100) {
+		if a.Kind == kindVolume && (a.New < 1 || a.Old <= a.New || a.Old > 100) {
 			return nil, errors.New("recovery journal contains invalid volumes")
 		}
 	}

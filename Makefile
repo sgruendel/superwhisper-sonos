@@ -1,10 +1,14 @@
 GO ?= go
 GOFMT ?= gofmt
 
-.PHONY: build test check vuln install uninstall clean
+.PHONY: build generate test check vuln install uninstall clean
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -o bin/superwhisper-sonos .
+
+# Regenerates the String methods of the enum types after their constants change.
+generate:
+	$(GO) generate ./...
 
 test:
 	$(GO) test -race ./...

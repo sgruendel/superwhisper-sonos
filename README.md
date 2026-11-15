@@ -185,10 +185,11 @@ Logs and `--check` output omit dictation text and Sonos source URLs.
 ## Development
 
 ```sh
-make test   # Tests and Go race detector; requires a C compiler
-make check  # go vet, gofmt, go mod tidy, and staticcheck
-make vuln   # govulncheck; needs network access
-make build  # Static binary with CGO disabled
+make test      # Tests and Go race detector; requires a C compiler
+make generate  # Regenerate enum String methods after changing their constants
+make check     # go vet, gofmt, go mod tidy, and staticcheck
+make vuln      # govulncheck; needs network access
+make build     # Static binary with CGO disabled
 ```
 
 Tests use temporary Unix sockets and a fake sonoscli executable. They cover

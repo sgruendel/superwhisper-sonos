@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -119,7 +120,7 @@ func fixture(t *testing.T) (*bridge, *fakeSonos, config) {
 	return b, f, config{Devices: []string{"192.0.2.1"}, VolumeFactor: 0.25}
 }
 
-func begin(t *testing.T, b *bridge, mode string, cfg config) {
+func begin(t *testing.T, b *bridge, mode playbackBehavior, cfg config) {
 	t.Helper()
 	if err := b.begin(context.Background(), mode, cfg, func() bool { return true }); err != nil {
 		t.Fatal(err)
@@ -135,8 +136,8 @@ func restore(t *testing.T, b *bridge) {
 
 func TestPauseAndResumeOnlyOnce(t *testing.T) {
 	b, f, cfg := fixture(t)
-	begin(t, b, "pause", cfg)
-	begin(t, b, "pause", cfg)
+	begin(t, b, behaviorPause, cfg)
+	begin(t, b, behaviorPause, cfg)
 	if f.status.Transport.State != "PAUSED_PLAYBACK" {
 		t.Fatal("not paused")
 	}
@@ -148,9 +149,9 @@ func TestPauseAndResumeOnlyOnce(t *testing.T) {
 }
 
 func TestInactiveSpeakersStaySilent(t *testing.T) {
-	for _, state := range []string{"STOPPED", "PAUSED_PLAYBACK"} {
-		for _, mode := range []string{"pause", "muffle", "duck", "mute"} {
-			t.Run(state+"/"+mode, func(t *testing.T) {
+	for _, state := range []transportState{"STOPPED", statePaused} {
+		for _, mode := range []playbackBehavior{behaviorPause, behaviorMuffle, behaviorDuck, behaviorMute} {
+			t.Run(string(state)+"/"+mode.String(), func(t *testing.T) {
 				b, f, cfg := fixture(t)
 				f.status.Transport.State = state
 				begin(t, b, mode, cfg)
@@ -164,8 +165,8 @@ func TestInactiveSpeakersStaySilent(t *testing.T) {
 }
 
 func TestMuffleAndDuckRestoreVolume(t *testing.T) {
-	for _, mode := range []string{"muffle", "duck"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, mode := range []playbackBehavior{behaviorMuffle, behaviorDuck} {
+		t.Run(mode.String(), func(t *testing.T) {
 			b, f, cfg := fixture(t)
 			begin(t, b, mode, cfg)
 			if f.volume != 10 {
@@ -181,8 +182,8 @@ func TestMuffleAndDuckRestoreVolume(t *testing.T) {
 
 func TestMuteAndUnmute(t *testing.T) {
 	b, f, cfg := fixture(t)
-	begin(t, b, "mute", cfg)
-	begin(t, b, "mute", cfg)
+	begin(t, b, behaviorMute, cfg)
+	begin(t, b, behaviorMute, cfg)
 	if !f.muted || f.volume != 40 {
 		t.Fatal("not muted", f.muted, f.volume)
 	}
@@ -196,7 +197,7 @@ func TestMuteAndUnmute(t *testing.T) {
 func TestAlreadyMutedGroupStaysMuted(t *testing.T) {
 	b, f, cfg := fixture(t)
 	f.muted = true
-	begin(t, b, "mute", cfg)
+	begin(t, b, behaviorMute, cfg)
 	restore(t, b)
 	if !f.muted || len(f.writes) != 0 {
 		t.Fatal(f.muted, f.writes)
@@ -207,7 +208,7 @@ func TestManualMuteChangesWin(t *testing.T) {
 	for _, change := range []string{"unmute", "coordinator"} {
 		t.Run(change, func(t *testing.T) {
 			b, f, cfg := fixture(t)
-			begin(t, b, "mute", cfg)
+			begin(t, b, behaviorMute, cfg)
 			if change == "unmute" {
 				f.muted = false
 			} else {
@@ -224,7 +225,7 @@ func TestManualMuteChangesWin(t *testing.T) {
 func TestRestartRecoversUncertainMute(t *testing.T) {
 	b, f, cfg := fixture(t)
 	f.failWrite = true
-	if err := b.begin(context.Background(), "mute", cfg, func() bool { return true }); err == nil {
+	if err := b.begin(context.Background(), behaviorMute, cfg, func() bool { return true }); err == nil {
 		t.Fatal("expected uncertain write")
 	}
 	f.failWrite = false
@@ -240,7 +241,7 @@ func TestRestartRecoversUncertainMute(t *testing.T) {
 
 func TestManualVolumeChangeWins(t *testing.T) {
 	b, f, cfg := fixture(t)
-	begin(t, b, "muffle", cfg)
+	begin(t, b, behaviorMuffle, cfg)
 	f.volume = 17
 	restore(t, b)
 	if f.volume != 17 {
@@ -255,7 +256,7 @@ func TestManualPlaybackAndCoordinatorChangesWin(t *testing.T) {
 			if field == "empty source" {
 				f.status.Position.TrackURI = ""
 			}
-			begin(t, b, "pause", cfg)
+			begin(t, b, behaviorPause, cfg)
 			switch field {
 			case "source":
 				f.status.Position.TrackURI = "track:2"
@@ -277,7 +278,7 @@ func TestManualPlaybackAndCoordinatorChangesWin(t *testing.T) {
 func TestDuplicateGroupTargetsAdjustOnce(t *testing.T) {
 	b, f, cfg := fixture(t)
 	cfg.Devices = append(cfg.Devices, "Other member")
-	begin(t, b, "muffle", cfg)
+	begin(t, b, behaviorMuffle, cfg)
 	if len(f.writes) != 1 || f.volume != 10 {
 		t.Fatal(f.writes, f.volume)
 	}
@@ -287,7 +288,7 @@ func TestReleaseDuringPreflightOrJournalingPreventsWrite(t *testing.T) {
 	for _, releaseAt := range []int{2, 3} {
 		b, f, cfg := fixture(t)
 		calls := 0
-		err := b.begin(context.Background(), "pause", cfg, func() bool {
+		err := b.begin(context.Background(), behaviorPause, cfg, func() bool {
 			calls++
 			return calls < releaseAt
 		})
@@ -305,11 +306,11 @@ func TestJournalPrecedesSpeakerWrite(t *testing.T) {
 	b, f, cfg := fixture(t)
 	f.beforePause = func() {
 		actions, err := b.journal.load()
-		if err != nil || len(actions) != 1 || actions[0].Kind != "pause" {
+		if err != nil || len(actions) != 1 || actions[0].Kind != kindPause {
 			t.Fatalf("journal before pause: %v, %v", actions, err)
 		}
 	}
-	begin(t, b, "pause", cfg)
+	begin(t, b, behaviorPause, cfg)
 }
 
 func TestJournalFailurePreventsSpeakerWrite(t *testing.T) {
@@ -318,7 +319,7 @@ func TestJournalFailurePreventsSpeakerWrite(t *testing.T) {
 	if err := os.Mkdir(b.journal.path, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.begin(context.Background(), "pause", cfg, func() bool { return true }); err == nil {
+	if err := b.begin(context.Background(), behaviorPause, cfg, func() bool { return true }); err == nil {
 		t.Fatal("expected journal failure")
 	}
 	if len(f.writes) != 0 || len(b.actions) != 0 {
@@ -329,7 +330,7 @@ func TestJournalFailurePreventsSpeakerWrite(t *testing.T) {
 func TestRestartRecoversUncertainWrites(t *testing.T) {
 	b, f, cfg := fixture(t)
 	f.failWrite = true
-	if err := b.begin(context.Background(), "muffle", cfg, func() bool { return true }); err == nil {
+	if err := b.begin(context.Background(), behaviorMuffle, cfg, func() bool { return true }); err == nil {
 		t.Fatal("expected uncertain write")
 	}
 	if f.volume != 10 {
@@ -352,12 +353,12 @@ func TestRestartRecoversUncertainWrites(t *testing.T) {
 
 func TestOfflineRestorationRetainsJournalAndBlocksNewSessions(t *testing.T) {
 	b, f, cfg := fixture(t)
-	begin(t, b, "pause", cfg)
+	begin(t, b, behaviorPause, cfg)
 	f.offline = true
 	if done, err := b.restore(context.Background()); done || err == nil {
 		t.Fatal(done, err)
 	}
-	begin(t, b, "muffle", cfg)
+	begin(t, b, behaviorMuffle, cfg)
 	if len(f.writes) != 1 {
 		t.Fatal(f.writes)
 	}
@@ -369,7 +370,7 @@ func TestLowVolumesAreNotRaised(t *testing.T) {
 	for _, volume := range []int{0, 1} {
 		b, f, cfg := fixture(t)
 		f.volume = volume
-		begin(t, b, "muffle", cfg)
+		begin(t, b, behaviorMuffle, cfg)
 		if len(f.writes) != 0 {
 			t.Fatal(f.writes)
 		}
@@ -377,7 +378,7 @@ func TestLowVolumesAreNotRaised(t *testing.T) {
 }
 
 func TestKeepPlayingAndUnknownBehaviorDoNotWrite(t *testing.T) {
-	for _, mode := range []string{"keepPlaying", "unknown"} {
+	for _, mode := range []playbackBehavior{behaviorKeepPlaying, behaviorUnknown} {
 		b, f, cfg := fixture(t)
 		begin(t, b, mode, cfg)
 		if len(f.writes) != 0 {
@@ -407,8 +408,24 @@ func TestPersistedJournalRecoveryAndPrivatePermissions(t *testing.T) {
 	}
 }
 
+func TestJournalStoresKindsAsText(t *testing.T) {
+	for kind, text := range map[actionKind]string{kindPause: "pause", kindVolume: "volume", kindMute: "mute"} {
+		data, err := json.Marshal(action{Kind: kind})
+		if err != nil || !strings.Contains(string(data), `"kind":"`+text+`"`) {
+			t.Fatal(string(data), err)
+		}
+		var decoded action
+		if err := json.Unmarshal(data, &decoded); err != nil || decoded.Kind != kind {
+			t.Fatal(decoded, err)
+		}
+	}
+}
+
 func TestMalformedJournalIsRejected(t *testing.T) {
 	for _, data := range []string{"null", "{}", "invalid", `[{}]`,
+		`[{"ip":"192.0.2.1","udn":"room-1","kind":"unknown"}]`,
+		`[{"ip":"192.0.2.1","udn":"room-1","kind":"Pause"}]`,
+		`[{"ip":"192.0.2.1","udn":"room-1","kind":2}]`,
 		`[{"ip":"192.0.2.1","udn":"room-1","kind":"volume","new":0,"old":40}]`} {
 		path := filepath.Join(t.TempDir(), "recovery.json")
 		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
@@ -422,7 +439,7 @@ func TestMalformedJournalIsRejected(t *testing.T) {
 
 func TestRecoveryClearsJournalAsArray(t *testing.T) {
 	b, _, cfg := fixture(t)
-	begin(t, b, "pause", cfg)
+	begin(t, b, behaviorPause, cfg)
 	restore(t, b)
 	data, err := os.ReadFile(b.journal.path)
 	if err != nil {

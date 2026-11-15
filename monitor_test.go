@@ -58,15 +58,15 @@ func TestMonitorReadsPreferencePerSessionAndHandlesDisconnect(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); m.run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
-	waitFor(t, func() bool { return m.snapshot() == (desiredState{true, 1, "pause"}) })
+	waitFor(t, func() bool { return m.snapshot() == (desiredState{true, 1, behaviorPause}) })
 	f.set("recording", 1, "muffle")
-	if next, err := m.read(ctx, m.snapshot()); err != nil || next.Behavior != "pause" {
+	if next, err := m.read(ctx, m.snapshot()); err != nil || next.Behavior != behaviorPause {
 		t.Fatal("preference changed within recording", next, err)
 	}
 	f.set("processing", 1, "pause")
 	waitFor(t, func() bool { return !m.snapshot().Active })
 	f.set("recording", 2, "muffle")
-	waitFor(t, func() bool { return m.snapshot() == (desiredState{true, 2, "muffle"}) })
+	waitFor(t, func() bool { return m.snapshot() == (desiredState{true, 2, behaviorMuffle}) })
 	f.mu.Lock()
 	if f.behaviorReads != 2 {
 		t.Errorf("read preference %d times; want once per recording", f.behaviorReads)
@@ -80,6 +80,26 @@ func TestMonitorReadsPreferencePerSessionAndHandlesDisconnect(t *testing.T) {
 	waitFor(t, func() bool { return m.snapshot().Active })
 }
 
+func TestBehaviorFromText(t *testing.T) {
+	for text, want := range map[string]playbackBehavior{
+		"keepPlaying": behaviorKeepPlaying, "pause": behaviorPause, "muffle": behaviorMuffle,
+		"duck": behaviorDuck, "mute": behaviorMute,
+		"Pause": behaviorUnknown, "unknown": behaviorUnknown, "": behaviorUnknown, "whisper": behaviorUnknown,
+	} {
+		if got := behaviorFromText(text); got != want {
+			t.Errorf("behaviorFromText(%q) = %v; want %v", text, got, want)
+		}
+	}
+}
+
+func TestMonitorPassesUnknownSettingAsUnknown(t *testing.T) {
+	f := &fakeWhisper{phase: "recording", session: 1, behavior: "whisper"}
+	next, err := fastMonitor(f).read(context.Background(), desiredState{})
+	if err != nil || next != (desiredState{true, 1, behaviorUnknown}) {
+		t.Fatal(next, err)
+	}
+}
+
 func TestMonitorToleratesTransientFailures(t *testing.T) {
 	f := &fakeWhisper{phase: "recording", session: 1, behavior: "pause"}
 	m := fastMonitor(f)
@@ -87,7 +107,7 @@ func TestMonitorToleratesTransientFailures(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); m.run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
-	want := desiredState{true, 1, "pause"}
+	want := desiredState{true, 1, behaviorPause}
 	waitFor(t, func() bool { return m.snapshot() == want })
 	f.mu.Lock()
 	f.failNext = m.lostAfter - 1
@@ -196,7 +216,7 @@ func TestSlowSonosDoesNotBlockReleaseDetection(t *testing.T) {
 
 func TestStartupRecoversBeforeNewSession(t *testing.T) {
 	b, f, cfg := fixture(t)
-	begin(t, b, "pause", cfg)
+	begin(t, b, behaviorPause, cfg)
 	restarted, err := newBridge(f, b.journal.path, testLogger())
 	if err != nil {
 		t.Fatal(err)

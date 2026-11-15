@@ -21,10 +21,19 @@ type device struct {
 	Location string `json:"location,omitempty"`
 }
 
+// transportState is a UPnP AVTransport state as Sonos reports it. The set is
+// defined by Sonos, so values beyond the constants below pass through as-is.
+type transportState string
+
+const (
+	statePlaying transportState = "PLAYING"
+	statePaused  transportState = "PAUSED_PLAYBACK"
+)
+
 type speakerStatus struct {
 	Device    device `json:"device"`
 	Transport struct {
-		State string `json:"State"`
+		State transportState `json:"State"`
 	} `json:"transport"`
 	Position struct {
 		TrackURI string `json:"TrackURI"`

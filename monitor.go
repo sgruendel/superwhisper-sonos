@@ -11,7 +11,7 @@ import (
 type desiredState struct {
 	Active   bool
 	Session  int64
-	Behavior string
+	Behavior playbackBehavior
 }
 
 // The monitor owns only desired state. The worker serializes all Sonos writes
@@ -96,7 +96,7 @@ func (m *monitor) read(ctx context.Context, last desiredState) (desiredState, er
 	if err != nil {
 		return desiredState{}, err
 	}
-	if status.Phase != "recording" {
+	if status.Phase != phaseRecording {
 		return desiredState{}, nil
 	}
 	if status.SessionID == nil {
@@ -105,9 +105,13 @@ func (m *monitor) read(ctx context.Context, last desiredState) (desiredState, er
 	if last.Active && last.Session == *status.SessionID {
 		return last, nil
 	}
-	behavior, err := m.whisper.Behavior(ctx)
+	setting, err := m.whisper.Behavior(ctx)
 	if err != nil {
 		return desiredState{}, err
+	}
+	behavior := behaviorFromText(setting)
+	if behavior == behaviorUnknown {
+		m.log.Warn("Sonos integration does not handle playback setting", "behavior", setting)
 	}
 	return desiredState{Active: true, Session: *status.SessionID, Behavior: behavior}, nil
 }

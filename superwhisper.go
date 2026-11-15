@@ -13,6 +13,37 @@ import (
 	"time"
 )
 
+// phaseRecording is the Superwhisper phase while the microphone is open. Other
+// phases (idle, processing, ...) all mean "not recording" to the bridge.
+const phaseRecording = "recording"
+
+// playbackBehavior is Superwhisper's "while recording" playback setting.
+//
+//go:generate go tool stringer -type=playbackBehavior -linecomment
+type playbackBehavior int
+
+// Each line comment is the setting's value in Superwhisper's config.
+const (
+	behaviorUnknown     playbackBehavior = iota // unknown
+	behaviorKeepPlaying                         // keepPlaying
+	behaviorPause                               // pause
+	behaviorMuffle                              // muffle
+	behaviorDuck                                // duck
+	behaviorMute                                // mute
+)
+
+// behaviorFromText maps a Superwhisper setting to its behavior. A setting this
+// bridge does not know, such as one added in a later Superwhisper release, is
+// behaviorUnknown.
+func behaviorFromText(text string) playbackBehavior {
+	for b := behaviorKeepPlaying; b <= behaviorMute; b++ {
+		if b.String() == text {
+			return b
+		}
+	}
+	return behaviorUnknown
+}
+
 type whisperStatus struct {
 	Phase     string `json:"phase"`
 	SessionID *int64 `json:"session_id"`
@@ -93,7 +124,7 @@ func (c *whisperSocket) Status(ctx context.Context) (whisperStatus, error) {
 	if err := c.call(ctx, "status", &status); err != nil {
 		return status, err
 	}
-	if status.Phase == "" || (status.Phase == "recording" && status.SessionID == nil) {
+	if status.Phase == "" || (status.Phase == phaseRecording && status.SessionID == nil) {
 		return status, errors.New("incomplete recording state from Superwhisper")
 	}
 	return status, nil

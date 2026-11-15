@@ -138,11 +138,11 @@ func checkStatus(ctx context.Context, sonos sonosClient, whisper whisperClient, 
 		return err
 	}
 	type speakerSummary struct {
-		Target string `json:"target"`
-		Device device `json:"device,omitzero"`
-		State  string `json:"state,omitzero"`
-		Volume *int   `json:"volume,omitzero"`
-		Error  string `json:"error,omitzero"`
+		Target string         `json:"target"`
+		Device device         `json:"device,omitzero"`
+		State  transportState `json:"state,omitzero"`
+		Volume *int           `json:"volume,omitzero"`
+		Error  string         `json:"error,omitzero"`
 	}
 	reply := struct {
 		Behavior     string           `json:"behavior"`

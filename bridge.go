@@ -32,12 +32,14 @@ func (b *bridge) save(actions []action) error {
 	return nil
 }
 
-func (b *bridge) begin(ctx context.Context, behavior string, cfg config, current func() bool) error {
-	if len(b.actions) != 0 || behavior == "keepPlaying" {
+func (b *bridge) begin(ctx context.Context, behavior playbackBehavior, cfg config, current func() bool) error {
+	if len(b.actions) != 0 {
 		return nil
 	}
-	if behavior != "pause" && behavior != "muffle" && behavior != "duck" && behavior != "mute" {
-		b.log.Warn("Sonos integration does not handle playback setting", "behavior", behavior)
+	switch behavior {
+	case behaviorPause, behaviorMuffle, behaviorDuck, behaviorMute:
+	default:
+		// Keep Playing, or a setting the monitor already reported as unknown.
 		return nil
 	}
 	seen := make(map[string]bool)
@@ -54,7 +56,7 @@ func (b *bridge) begin(ctx context.Context, behavior string, cfg config, current
 	return errors.Join(failures...)
 }
 
-func (b *bridge) adjust(ctx context.Context, target, behavior string, factor float64,
+func (b *bridge) adjust(ctx context.Context, target string, behavior playbackBehavior, factor float64,
 	seen map[string]bool, current func() bool,
 ) error {
 	status, err := b.sonos.Status(ctx, target)
@@ -66,21 +68,21 @@ func (b *bridge) adjust(ctx context.Context, target, behavior string, factor flo
 		return nil
 	}
 	seen[ip] = true
-	if status.Transport.State != "PLAYING" {
+	if status.Transport.State != statePlaying {
 		return nil
 	}
 	a := action{IP: ip, UDN: status.Device.UDN, Name: status.Device.Name,
-		Kind: "pause", URI: status.Position.TrackURI}
+		Kind: kindPause, URI: status.Position.TrackURI}
 	switch behavior {
-	case "mute":
+	case behaviorMute:
 		// A group the user already muted stays theirs to unmute.
-		a.Kind = "mute"
+		a.Kind = kindMute
 		muted, err := b.sonos.GroupMute(ctx, ip)
 		if err != nil || muted {
 			return err
 		}
-	case "muffle", "duck":
-		a.Kind = "volume"
+	case behaviorMuffle, behaviorDuck:
+		a.Kind = kindVolume
 		a.Old, err = b.sonos.GroupVolume(ctx, ip)
 		if err != nil {
 			return err
@@ -102,17 +104,17 @@ func (b *bridge) adjust(ctx context.Context, target, behavior string, factor flo
 		return nil
 	}
 	switch a.Kind {
-	case "pause":
+	case kindPause:
 		if err := b.sonos.Pause(ctx, ip); err != nil {
 			return err
 		}
 		b.log.Info("Paused Sonos", "room", a.Name)
-	case "mute":
+	case kindMute:
 		if err := b.sonos.SetGroupMute(ctx, ip, true); err != nil {
 			return err
 		}
 		b.log.Info("Muted Sonos", "room", a.Name)
-	default:
+	case kindVolume:
 		if err := b.sonos.SetGroupVolume(ctx, ip, a.New); err != nil {
 			return err
 		}
@@ -150,7 +152,7 @@ func (b *bridge) restoreOne(ctx context.Context, a action) error {
 		return nil
 	}
 	switch a.Kind {
-	case "mute":
+	case kindMute:
 		muted, err := b.sonos.GroupMute(ctx, a.IP)
 		if err != nil {
 			return err
@@ -164,8 +166,8 @@ func (b *bridge) restoreOne(ctx context.Context, a action) error {
 		}
 		b.log.Info("Unmuted Sonos", "room", a.Name)
 		return nil
-	case "pause":
-		if status.Transport.State == "PAUSED_PLAYBACK" && a.URI != "" && status.Position.TrackURI == a.URI {
+	case kindPause:
+		if status.Transport.State == statePaused && a.URI != "" && status.Position.TrackURI == a.URI {
 			if err := b.sonos.Play(ctx, a.IP); err != nil {
 				return err
 			}
