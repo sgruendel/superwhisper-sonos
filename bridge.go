@@ -36,7 +36,7 @@ func (b *bridge) begin(ctx context.Context, behavior string, cfg config, current
 	if len(b.actions) != 0 || behavior == "keepPlaying" {
 		return nil
 	}
-	if behavior != "pause" && behavior != "muffle" && behavior != "duck" {
+	if behavior != "pause" && behavior != "muffle" && behavior != "duck" && behavior != "mute" {
 		b.log.Warn("Sonos integration does not handle playback setting", "behavior", behavior)
 		return nil
 	}
@@ -71,7 +71,15 @@ func (b *bridge) adjust(ctx context.Context, target, behavior string, factor flo
 	}
 	a := action{IP: ip, UDN: status.Device.UDN, Name: status.Device.Name,
 		Kind: "pause", URI: status.Position.TrackURI}
-	if behavior != "pause" {
+	switch behavior {
+	case "mute":
+		// A group the user already muted stays theirs to unmute.
+		a.Kind = "mute"
+		muted, err := b.sonos.GroupMute(ctx, ip)
+		if err != nil || muted {
+			return err
+		}
+	case "muffle", "duck":
 		a.Kind = "volume"
 		a.Old, err = b.sonos.GroupVolume(ctx, ip)
 		if err != nil {
@@ -93,12 +101,18 @@ func (b *bridge) adjust(ctx context.Context, target, behavior string, factor flo
 	if ctx.Err() != nil || !current() {
 		return nil
 	}
-	if a.Kind == "pause" {
+	switch a.Kind {
+	case "pause":
 		if err := b.sonos.Pause(ctx, ip); err != nil {
 			return err
 		}
 		b.log.Info("Paused Sonos", "room", a.Name)
-	} else {
+	case "mute":
+		if err := b.sonos.SetGroupMute(ctx, ip, true); err != nil {
+			return err
+		}
+		b.log.Info("Muted Sonos", "room", a.Name)
+	default:
 		if err := b.sonos.SetGroupVolume(ctx, ip, a.New); err != nil {
 			return err
 		}
@@ -135,7 +149,22 @@ func (b *bridge) restoreOne(ctx context.Context, a action) error {
 		b.log.Info("Coordinator changed; leaving playback alone", "room", a.Name)
 		return nil
 	}
-	if a.Kind == "pause" {
+	switch a.Kind {
+	case "mute":
+		muted, err := b.sonos.GroupMute(ctx, a.IP)
+		if err != nil {
+			return err
+		}
+		if !muted {
+			b.log.Info("Group unmuted manually; leaving it", "room", a.Name)
+			return nil
+		}
+		if err := b.sonos.SetGroupMute(ctx, a.IP, false); err != nil {
+			return err
+		}
+		b.log.Info("Unmuted Sonos", "room", a.Name)
+		return nil
+	case "pause":
 		if status.Transport.State == "PAUSED_PLAYBACK" && a.URI != "" && status.Position.TrackURI == a.URI {
 			if err := b.sonos.Play(ctx, a.IP); err != nil {
 				return err

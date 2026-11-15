@@ -162,6 +162,20 @@ func TestSonosCLIArgumentsAndHostnameResolution(t *testing.T) {
 			t.Fatalf("arguments: %q, want %q", data, want)
 		}
 	}
+	for mute, state := range map[bool]string{true: "on", false: "off"} {
+		if err := c.SetGroupMute(context.Background(), "192.0.2.1", mute); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(os.Getenv("SONOS_TEST_ARGS"))
+		if err != nil || !strings.HasSuffix(string(data), "\ngroup\nmute\n"+state+"\n") {
+			t.Fatal(string(data), err)
+		}
+	}
+	t.Setenv("SONOS_TEST_REPLY", `{"mute":true}`)
+	if muted, err := c.GroupMute(context.Background(), "192.0.2.1"); err != nil || !muted {
+		t.Fatal(muted, err)
+	}
+	t.Setenv("SONOS_TEST_REPLY", `{"volume":40}`)
 	c.lookupHost = func(context.Context, string) ([]string, error) { return []string{"192.0.2.2"}, nil }
 	if _, err := c.GroupVolume(context.Background(), "speaker.local"); err != nil {
 		t.Fatal(err)
@@ -179,6 +193,12 @@ func TestSonosCLIValidatesVolumeAndTransport(t *testing.T) {
 		t.Setenv("SONOS_TEST_REPLY", response)
 		if _, err := c.GroupVolume(context.Background(), "192.0.2.1"); err == nil {
 			t.Fatal("accepted invalid volume", response)
+		}
+	}
+	for _, response := range []string{"{}", `{"mute":null}`, `{"mute":"true"}`, `{"mute":1}`} {
+		t.Setenv("SONOS_TEST_REPLY", response)
+		if _, err := c.GroupMute(context.Background(), "192.0.2.1"); err == nil {
+			t.Fatal("accepted invalid mute state", response)
 		}
 	}
 	t.Setenv("SONOS_TEST_REPLY", `{"device":{"ip":"192.0.2.1","udn":"room-1"},"transport":{}}`)

@@ -35,6 +35,8 @@ type sonosClient interface {
 	Status(context.Context, string) (speakerStatus, error)
 	GroupVolume(context.Context, string) (int, error)
 	SetGroupVolume(context.Context, string, int) error
+	GroupMute(context.Context, string) (bool, error)
+	SetGroupMute(context.Context, string, bool) error
 	Pause(context.Context, string) error
 	Play(context.Context, string) error
 }
@@ -125,6 +127,27 @@ func (c *sonosCLI) SetGroupVolume(ctx context.Context, target string, volume int
 		return fmt.Errorf("volume must be between 0 and 100")
 	}
 	return c.call(ctx, target, nil, "group", "volume", "set", strconv.Itoa(volume))
+}
+
+func (c *sonosCLI) GroupMute(ctx context.Context, target string) (bool, error) {
+	var reply struct {
+		Mute *bool `json:"mute"`
+	}
+	if err := c.call(ctx, target, &reply, "group", "mute", "get"); err != nil {
+		return false, err
+	}
+	if reply.Mute == nil {
+		return false, fmt.Errorf("Sonos returned no mute state")
+	}
+	return *reply.Mute, nil
+}
+
+func (c *sonosCLI) SetGroupMute(ctx context.Context, target string, mute bool) error {
+	state := "off"
+	if mute {
+		state = "on"
+	}
+	return c.call(ctx, target, nil, "group", "mute", state)
 }
 
 func (c *sonosCLI) Pause(ctx context.Context, target string) error {

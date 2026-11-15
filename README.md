@@ -6,13 +6,13 @@ Linux background service that follows Superwhisper recording sessions and contro
 | --- | --- | --- |
 | Pause | Pause groups currently playing | Resume groups paused by the bridge |
 | Muffle / Duck (Lower) | Reduce group volume to 25% of its previous value | Restore previous volume |
+| Mute | Mute groups currently playing | Unmute groups muted by the bridge |
 | Keep Playing | Leave playback alone | Leave playback alone |
 
 The bridge uses Superwhisper's local control socket and
 [steipete/sonoscli](https://github.com/steipete/sonoscli) for local network control.
 No Sonos cloud authorization is required. Muffle uses volume reduction on Sonos;
-it does not apply Superwhisper's local audio filter. The Mute setting currently
-leaves Sonos alone.
+it does not apply Superwhisper's local audio filter.
 
 ## Requirements
 
@@ -124,11 +124,12 @@ when the phase leaves `recording`, including during transcription. A separate
 goroutine keeps watching recording state while Sonos requests are in flight,
 so releasing the key cancels adjustments that have not yet been sent.
 
-Stopped or already paused groups are left alone. A paused group is resumed only
-if it is still paused on the same source and coordinator. A reduced volume is
-restored only if it still matches the bridge's value, so manual volume changes
-win. Manual changes that produce exactly the bridge's volume or paused state
-cannot be distinguished.
+Stopped, already paused, and already muted groups are left alone. A paused
+group is resumed only if it is still paused on the same source and coordinator.
+A reduced volume is restored only if it still matches the bridge's value, and a
+muted group is unmuted only if it is still muted, so manual changes win. Manual
+changes that produce exactly the bridge's volume, paused, or muted state cannot
+be distinguished.
 
 Superwhisper counts as lost after three consecutive failed checks, so a single
 slow reply does not resume and re-pause Sonos mid-recording.

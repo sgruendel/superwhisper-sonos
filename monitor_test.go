@@ -137,7 +137,7 @@ func writeCount(f *fakeSonos) int {
 }
 
 func TestRecordingLifecycle(t *testing.T) {
-	for _, mode := range []string{"pause", "muffle", "duck"} {
+	for _, mode := range []string{"pause", "muffle", "duck", "mute"} {
 		for _, finish := range []string{"idle", "processing", "shutdown", "disconnect"} {
 			t.Run(mode+"/"+finish, func(t *testing.T) {
 				b, f, cfg := fixture(t)
@@ -158,8 +158,8 @@ func TestRecordingLifecycle(t *testing.T) {
 				}
 				waitFor(t, func() bool { return writeCount(f) == 2 })
 				stop()
-				if f.volume != 40 || f.status.Transport.State != "PLAYING" || len(b.actions) != 0 {
-					t.Fatal("original state was not restored", f.volume, f.status, b.actions)
+				if f.volume != 40 || f.muted || f.status.Transport.State != "PLAYING" || len(b.actions) != 0 {
+					t.Fatal("original state was not restored", f.volume, f.muted, f.status, b.actions)
 				}
 			})
 		}

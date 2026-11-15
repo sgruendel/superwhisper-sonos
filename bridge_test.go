@@ -22,6 +22,7 @@ type fakeSonos struct {
 	mu           sync.Mutex
 	status       speakerStatus
 	volume       int
+	muted        bool
 	writes       []string
 	offline      bool
 	failWrite    bool
@@ -79,6 +80,23 @@ func (f *fakeSonos) SetGroupVolume(_ context.Context, _ string, volume int) erro
 	return f.write("volume", func() { f.volume = volume })
 }
 
+func (f *fakeSonos) GroupMute(context.Context, string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.offline {
+		return false, errors.New("speaker offline")
+	}
+	return f.muted, nil
+}
+
+func (f *fakeSonos) SetGroupMute(_ context.Context, _ string, mute bool) error {
+	command := "unmute"
+	if mute {
+		command = "mute"
+	}
+	return f.write(command, func() { f.muted = mute })
+}
+
 func (f *fakeSonos) Pause(context.Context, string) error {
 	if f.beforePause != nil {
 		f.beforePause()
@@ -130,7 +148,7 @@ func TestPauseAndResumeOnlyOnce(t *testing.T) {
 
 func TestInactiveSpeakersStaySilent(t *testing.T) {
 	for _, state := range []string{"STOPPED", "PAUSED_PLAYBACK"} {
-		for _, mode := range []string{"pause", "muffle", "duck"} {
+		for _, mode := range []string{"pause", "muffle", "duck", "mute"} {
 			t.Run(state+"/"+mode, func(t *testing.T) {
 				b, f, cfg := fixture(t)
 				f.status.Transport.State = state
@@ -157,6 +175,65 @@ func TestMuffleAndDuckRestoreVolume(t *testing.T) {
 				t.Fatal(f.volume)
 			}
 		})
+	}
+}
+
+func TestMuteAndUnmute(t *testing.T) {
+	b, f, cfg := fixture(t)
+	begin(t, b, "mute", cfg)
+	begin(t, b, "mute", cfg)
+	if !f.muted || f.volume != 40 {
+		t.Fatal("not muted", f.muted, f.volume)
+	}
+	restore(t, b)
+	restore(t, b)
+	if f.muted || !reflect.DeepEqual(f.writes, []string{"mute", "unmute"}) {
+		t.Fatal(f.muted, f.writes)
+	}
+}
+
+func TestAlreadyMutedGroupStaysMuted(t *testing.T) {
+	b, f, cfg := fixture(t)
+	f.muted = true
+	begin(t, b, "mute", cfg)
+	restore(t, b)
+	if !f.muted || len(f.writes) != 0 {
+		t.Fatal(f.muted, f.writes)
+	}
+}
+
+func TestManualMuteChangesWin(t *testing.T) {
+	for _, change := range []string{"unmute", "coordinator"} {
+		t.Run(change, func(t *testing.T) {
+			b, f, cfg := fixture(t)
+			begin(t, b, "mute", cfg)
+			if change == "unmute" {
+				f.muted = false
+			} else {
+				f.status.Device.UDN = "different-room"
+			}
+			restore(t, b)
+			if !reflect.DeepEqual(f.writes, []string{"mute"}) {
+				t.Fatal(f.writes)
+			}
+		})
+	}
+}
+
+func TestRestartRecoversUncertainMute(t *testing.T) {
+	b, f, cfg := fixture(t)
+	f.failWrite = true
+	if err := b.begin(context.Background(), "mute", cfg, func() bool { return true }); err == nil {
+		t.Fatal("expected uncertain write")
+	}
+	f.failWrite = false
+	restarted, err := newBridge(f, b.journal.path, testLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	restore(t, restarted)
+	if f.muted {
+		t.Fatal("group left muted")
 	}
 }
 
@@ -298,8 +375,8 @@ func TestLowVolumesAreNotRaised(t *testing.T) {
 	}
 }
 
-func TestKeepPlayingAndUnsupportedMuteDoNotWrite(t *testing.T) {
-	for _, mode := range []string{"keepPlaying", "mute"} {
+func TestKeepPlayingAndUnknownBehaviorDoNotWrite(t *testing.T) {
+	for _, mode := range []string{"keepPlaying", "unknown"} {
 		b, f, cfg := fixture(t)
 		begin(t, b, mode, cfg)
 		if len(f.writes) != 0 {
