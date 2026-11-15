@@ -12,13 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 )
 
-var version = "dev"
-
 func main() {
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	log := newLogger(os.Stderr, underJournald(os.Stderr))
 	if err := execute(os.Args[1:], os.Stdout, os.Stderr, log); err != nil {
 		log.Error("Bridge stopped", "error", err)
 		os.Exit(1)
@@ -49,7 +48,7 @@ func execute(args []string, stdout, stderr io.Writer, log *slog.Logger) error {
 		return fmt.Errorf("unexpected arguments: %v", flags.Args())
 	}
 	if *showVersion {
-		_, err := fmt.Fprintln(stdout, "superwhisper-sonos", version)
+		_, err := fmt.Fprintln(stdout, "superwhisper-sonos", buildVersion())
 		return err
 	}
 	if *check && *restore {
@@ -90,6 +89,47 @@ func execute(args []string, stdout, stderr io.Writer, log *slog.Logger) error {
 	}
 	log.Info("Following Superwhisper", "devices", cfg.Devices, "volume_factor", cfg.VolumeFactor)
 	return runBridge(ctx, b, newMonitor(whisper, log), configLoader)
+}
+
+// buildVersion reports the version the Go toolchain stamped into the binary:
+// the module version from a git tag, or a pseudo-version from the commit.
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return "dev"
+	}
+	return info.Main.Version
+}
+
+// newLogger writes text logs. journald timestamps every line itself, so the
+// logger's own time attribute is dropped there.
+func newLogger(w io.Writer, journald bool) *slog.Logger {
+	var opts slog.HandlerOptions
+	if journald {
+		opts.ReplaceAttr = func(groups []string, a slog.Attr) slog.Attr {
+			if len(groups) == 0 && a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		}
+	}
+	return slog.New(slog.NewTextHandler(w, &opts))
+}
+
+// underJournald reports whether f is the stream systemd connected to the
+// journal. JOURNAL_STREAM names that stream's device and inode; comparing them
+// avoids trusting a variable inherited by a process whose stderr was redirected.
+func underJournald(f *os.File) bool {
+	stream := os.Getenv("JOURNAL_STREAM")
+	if stream == "" {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stream == fmt.Sprintf("%d:%d", st.Dev, st.Ino)
 }
 
 func checkStatus(ctx context.Context, sonos sonosClient, whisper whisperClient, cfg config, out io.Writer) error {

@@ -7,11 +7,13 @@ import (
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -257,6 +259,42 @@ func TestStateLockExcludesConcurrentBridges(t *testing.T) {
 		t.Fatal("lock not released", err)
 	}
 	third.Close()
+}
+
+func TestJournaldLogsOmitTimestamp(t *testing.T) {
+	for _, journald := range []bool{false, true} {
+		var output bytes.Buffer
+		newLogger(&output, journald).Info("Paused Sonos", "room", "Office")
+		if got := strings.Contains(output.String(), "time="); got == journald {
+			t.Errorf("journald=%v: %q", journald, output.String())
+		}
+		if !strings.Contains(output.String(), `msg="Paused Sonos" room=Office`) {
+			t.Errorf("journald=%v: %q", journald, output.String())
+		}
+	}
+}
+
+func TestUnderJournaldMatchesStream(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := info.Sys().(*syscall.Stat_t)
+	for stream, want := range map[string]bool{
+		"":                                   false,
+		"1:2":                                false,
+		fmt.Sprintf("%d:%d", st.Dev, st.Ino): true,
+	} {
+		t.Setenv("JOURNAL_STREAM", stream)
+		if got := underJournald(f); got != want {
+			t.Errorf("JOURNAL_STREAM=%q: got %v", stream, got)
+		}
+	}
 }
 
 func TestHelpAndVersionDoNotRequireSonos(t *testing.T) {
