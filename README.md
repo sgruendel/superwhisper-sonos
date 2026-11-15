@@ -12,7 +12,7 @@ The bridge uses Superwhisper's local control socket and
 [steipete/sonoscli](https://github.com/steipete/sonoscli) for local network control.
 No Sonos cloud authorization is required. Muffle uses volume reduction on Sonos;
 it does not apply Superwhisper's local audio filter. The Mute setting currently
-leaves Sonos alone, preserving the behavior of the original Python bridge.
+leaves Sonos alone.
 
 ## Requirements
 
@@ -61,7 +61,6 @@ service before starting a foreground session. `--check` can run alongside it.
 ## Devices and volume
 
 Edit `~/.config/superwhisper-sonos/config.toml`. Changes apply to the next recording.
-The same TOML config works with both the Python bridge and this Go port.
 
 ```toml
 sinuous_config = "~/.config/sinuous/config.toml"
@@ -105,12 +104,6 @@ journalctl --user -u superwhisper-sonos -n 30
 The installer puts the bridge in `~/.local/bin`, preserves an existing config,
 and enables and restarts `superwhisper-sonos.service`. Its service `PATH`
 includes `~/.local/bin`, `~/go/bin`, and the standard system binary directories.
-
-On an existing Python installation, `make install` replaces the service's
-command with the Go binary. The old service is stopped normally so it can
-restore its outstanding changes. Both versions use the same journal and lock;
-pending Python actions can also be recovered by Go. The old Python source is
-left on disk.
 
 To disable the integration and restore outstanding changes:
 
@@ -184,6 +177,6 @@ make build  # Static binary with CGO disabled
 
 Tests use temporary Unix sockets and a fake sonoscli executable. They cover
 playback and volume restoration, cancellation during slow requests, manual
-changes, disconnects, shutdown, uncertain writes, Python journal compatibility,
+changes, disconnects, shutdown, uncertain writes, journal recovery,
 configuration precedence, process timeouts, and concurrent instance exclusion.
 They do not change actual speaker playback.

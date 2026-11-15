@@ -13,7 +13,7 @@ if ! command -v sonos >/dev/null 2>&1; then
   exit 1
 fi
 
-# Existing Python installations keep their config and recovery journal.
+# Existing installations keep their config and recovery journal.
 install -Dm755 "$source_dir/bin/superwhisper-sonos" "$HOME/.local/bin/superwhisper-sonos"
 if [[ ! -e "$config_dir/superwhisper-sonos/config.toml" ]]; then
   install -Dm600 "$source_dir/config.example.toml" "$config_dir/superwhisper-sonos/config.toml"
@@ -22,6 +22,4 @@ install -Dm644 "$source_dir/packaging/superwhisper-sonos.service" \
   "$config_dir/systemd/user/superwhisper-sonos.service"
 systemctl --user daemon-reload
 systemctl --user enable superwhisper-sonos.service
-# Restart also migrates a running Python bridge: systemd stops it and lets it
-# restore its changes before the Go binary acquires the same recovery lock.
 systemctl --user restart superwhisper-sonos.service

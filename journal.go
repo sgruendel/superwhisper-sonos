@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// Keep this schema compatible with the Python bridge's recovery.json.
+// action is one entry in the on-disk recovery journal.
 type action struct {
 	IP   string `json:"ip"`
 	UDN  string `json:"udn"`

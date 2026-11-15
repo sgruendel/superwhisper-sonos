@@ -31,7 +31,7 @@ func execute(args []string, stdout, stderr io.Writer, log *slog.Logger) error {
 	flags := flag.NewFlagSet("superwhisper-sonos", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", defaults.config, "Bridge TOML configuration")
-	statePath := flags.String("state", defaults.state, "Recovery journal (compatible with the Python bridge)")
+	statePath := flags.String("state", defaults.state, "Recovery journal")
 	socketPath := flags.String("socket", defaults.socket, "Superwhisper control socket")
 	sonosPath := flags.String("sonos", "sonos", "Path to the sonoscli executable")
 	check := flags.Bool("check", false, "Read settings and speaker status without changing playback")

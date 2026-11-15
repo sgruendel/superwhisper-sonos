@@ -308,7 +308,7 @@ func TestKeepPlayingAndUnsupportedMuteDoNotWrite(t *testing.T) {
 	}
 }
 
-func TestPythonJournalCompatibilityAndPrivatePermissions(t *testing.T) {
+func TestPersistedJournalRecoveryAndPrivatePermissions(t *testing.T) {
 	b, f, _ := fixture(t)
 	f.volume = 10
 	data := `[{"ip":"192.0.2.1","udn":"room-1","name":"Office","kind":"volume","uri":"track:1","old":40,"new":10}]`
