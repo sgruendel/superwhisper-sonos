@@ -1,7 +1,7 @@
 # superwhisper-sonos
 
 [![build](https://github.com/sgruendel/superwhisper-sonos/actions/workflows/build.yaml/badge.svg)](https://github.com/sgruendel/superwhisper-sonos/actions/workflows/build.yaml)
-[![Coverage](https://img.shields.io/badge/Coverage-81.5%25-brightgreen)](https://github.com/sgruendel/superwhisper-sonos/actions/workflows/build.yaml)
+[![Coverage](https://img.shields.io/badge/Coverage-82.3%25-brightgreen)](https://github.com/sgruendel/superwhisper-sonos/actions/workflows/build.yaml)
 
 Linux background service that follows Superwhisper recording sessions and controls Sonos groups using sonoscli
 
