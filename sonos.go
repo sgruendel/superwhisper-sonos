@@ -3,7 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
 	"net"
 	"os/exec"
@@ -84,7 +85,7 @@ func (c *sonosCLI) call(ctx context.Context, target string, out any, args ...str
 		return fmt.Errorf("sonos %s: %w: %s", strings.Join(args, " "), err, detail)
 	}
 	if out == nil {
-		if !json.Valid(stdout.Bytes()) {
+		if !jsontext.Value(stdout.Bytes()).IsValid() {
 			return fmt.Errorf("sonos %s returned invalid JSON", strings.Join(args, " "))
 		}
 		return nil

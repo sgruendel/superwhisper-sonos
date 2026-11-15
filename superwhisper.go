@@ -3,7 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
 	"io"
 	"net"
@@ -38,7 +39,8 @@ func (c *whisperSocket) call(ctx context.Context, command string, out any) error
 	if err := conn.SetDeadline(deadline); err != nil {
 		return err
 	}
-	if err := json.NewEncoder(conn).Encode(struct {
+	// jsontext.Encoder ends each top-level value with the newline the protocol expects.
+	if err := json.MarshalEncode(jsontext.NewEncoder(conn), struct {
 		Version int    `json:"version"`
 		Command string `json:"command"`
 	}{1, command}); err != nil {
@@ -52,7 +54,7 @@ func (c *whisperSocket) call(ctx context.Context, command string, out any) error
 	if len(line) > maxReply {
 		return fmt.Errorf("Superwhisper reply exceeds %d bytes", maxReply)
 	}
-	var envelope map[string]json.RawMessage
+	var envelope map[string]jsontext.Value
 	if err := json.Unmarshal(line, &envelope); err != nil {
 		return fmt.Errorf("decode Superwhisper %s: %w", command, err)
 	}

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,8 +17,8 @@ type action struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"`
 	URI  string `json:"uri"`
-	Old  int    `json:"old,omitempty"`
-	New  int    `json:"new,omitempty"`
+	Old  int    `json:"old,omitzero"`
+	New  int    `json:"new,omitzero"`
 }
 
 type journal struct{ path string }
@@ -60,10 +60,8 @@ func (j journal) save(actions []action) error {
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
-	if actions == nil {
-		actions = []action{}
-	}
-	if err := json.NewEncoder(f).Encode(actions); err != nil {
+	// v2 writes a nil slice as [], so a cleared journal stays a JSON array.
+	if err := json.MarshalWrite(f, actions); err != nil {
 		return err
 	}
 	if err := f.Sync(); err != nil {

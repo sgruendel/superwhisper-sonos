@@ -4,7 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"io"
 	"net"
@@ -36,7 +37,7 @@ func testWhisperSocket(t *testing.T, reply func(command string) string) string {
 					Version int    `json:"version"`
 					Command string `json:"command"`
 				}
-				if err := json.NewDecoder(conn).Decode(&request); err != nil {
+				if err := json.UnmarshalDecode(jsontext.NewDecoder(conn), &request); err != nil {
 					t.Error(err)
 					return
 				}

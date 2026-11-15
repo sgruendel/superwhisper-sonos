@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -116,8 +117,5 @@ func checkStatus(ctx context.Context, sonos sonosClient, whisper whisperClient, 
 			Device: status.Device, State: status.Transport.State, Volume: status.Volume,
 		})
 	}
-	encoder := json.NewEncoder(out)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(reply)
+	return json.MarshalEncode(jsontext.NewEncoder(out, jsontext.WithIndent("  ")), reply)
 }
