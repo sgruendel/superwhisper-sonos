@@ -16,7 +16,7 @@ leaves Sonos alone.
 
 ## Requirements
 
-- Linux and Go 1.23 or later to build.
+- Linux and Go 1.27 or later to build.
 - Superwhisper for Linux, running with its local control socket.
 - The `sonos` executable from sonoscli, on `PATH` or selected with `--sonos`.
 - Network access to the selected Sonos speakers on TCP port 1400.
