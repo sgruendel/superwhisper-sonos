@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -23,7 +25,7 @@ type journal struct{ path string }
 
 func (j journal) load() ([]action, error) {
 	data, err := os.ReadFile(j.path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return []action{}, nil
 	}
 	if err != nil {

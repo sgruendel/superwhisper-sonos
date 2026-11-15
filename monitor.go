@@ -77,12 +77,10 @@ func (m *monitor) run(ctx context.Context) {
 			}
 			failed = false
 		}
-		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
 			return
-		case <-timer.C:
+		case <-time.After(interval):
 		}
 	}
 }
@@ -110,14 +108,11 @@ func (m *monitor) read(ctx context.Context, last desiredState) (desiredState, er
 
 func runBridge(ctx context.Context, b *bridge, m *monitor, configLoader func() (config, error)) error {
 	monitorCtx, cancelMonitor := context.WithCancel(ctx)
-	monitorDone := make(chan struct{})
-	go func() {
-		defer close(monitorDone)
-		m.run(monitorCtx)
-	}()
+	var wg sync.WaitGroup
+	wg.Go(func() { m.run(monitorCtx) })
 	defer func() {
 		cancelMonitor()
-		<-monitorDone
+		wg.Wait()
 	}()
 	cleanup := func() error {
 		// Signal cancellation stops new commands but must not cancel restoration.

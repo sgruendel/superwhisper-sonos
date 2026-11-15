@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -84,7 +86,7 @@ func loadConfig(path string) (config, error) {
 			} `toml:"core"`
 		}
 		if _, err := toml.DecodeFile(cfg.SinuousConfig, &sinuous); err != nil {
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, fs.ErrNotExist) {
 				return config{}, fmt.Errorf("read Sinuous config: %w", err)
 			}
 		} else if len(sinuous.Core.Devices) > 0 {

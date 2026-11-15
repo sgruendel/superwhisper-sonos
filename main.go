@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ func execute(args []string, stdout, stderr io.Writer, log *slog.Logger) error {
 	restore := flags.Bool("restore", false, "Restore pending changes and exit")
 	showVersion := flags.Bool("version", false, "Print version and exit")
 	if err := flags.Parse(args); err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
 		return err

@@ -29,7 +29,7 @@ func (c *whisperSocket) call(ctx context.Context, command string, out any) error
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", c.path)
 	if err != nil {
-		return err
+		return fmt.Errorf("connect to Superwhisper: %w", err)
 	}
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
@@ -42,7 +42,7 @@ func (c *whisperSocket) call(ctx context.Context, command string, out any) error
 		Version int    `json:"version"`
 		Command string `json:"command"`
 	}{1, command}); err != nil {
-		return err
+		return fmt.Errorf("send Superwhisper %s: %w", command, err)
 	}
 	const maxReply = 2 * 1024 * 1024
 	line, err := bufio.NewReader(io.LimitReader(conn, maxReply+1)).ReadBytes('\n')
