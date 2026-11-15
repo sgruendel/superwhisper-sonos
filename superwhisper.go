@@ -53,17 +53,17 @@ func (c *whisperSocket) call(ctx context.Context, command string, out any) error
 		return fmt.Errorf("read Superwhisper %s: %w", command, err)
 	}
 	if len(line) > maxReply {
-		return fmt.Errorf("Superwhisper reply exceeds %d bytes", maxReply)
+		return fmt.Errorf("reply from Superwhisper exceeds %d bytes", maxReply)
 	}
 	var envelope map[string]jsontext.Value
 	if err := json.Unmarshal(line, &envelope); err != nil {
 		return fmt.Errorf("decode Superwhisper %s: %w", command, err)
 	}
 	if envelope == nil {
-		return fmt.Errorf("Superwhisper returned no object")
+		return fmt.Errorf("no JSON object from Superwhisper")
 	}
 	if message := envelope["error"]; len(message) > 0 && string(message) != "null" {
-		return fmt.Errorf("Superwhisper rejected %s: %s", command, errorText(message))
+		return fmt.Errorf("%s request rejected by Superwhisper: %s", command, errorText(message))
 	}
 	return json.Unmarshal(line, out)
 }
@@ -89,7 +89,7 @@ func (c *whisperSocket) Status(ctx context.Context) (whisperStatus, error) {
 		return status, err
 	}
 	if status.Phase == "" || (status.Phase == "recording" && status.SessionID == nil) {
-		return status, fmt.Errorf("Superwhisper returned an incomplete recording state")
+		return status, fmt.Errorf("incomplete recording state from Superwhisper")
 	}
 	return status, nil
 }
@@ -104,7 +104,7 @@ func (c *whisperSocket) Behavior(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if reply.Config.Behavior == "" {
-		return "", fmt.Errorf("Superwhisper returned no playback preference")
+		return "", fmt.Errorf("no playback preference from Superwhisper")
 	}
 	return reply.Config.Behavior, nil
 }

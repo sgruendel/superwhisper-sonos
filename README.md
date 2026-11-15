@@ -23,7 +23,8 @@ it does not apply Superwhisper's local audio filter.
 - systemd for the supplied user service; the binary can also run directly.
 
 The bridge compiles to one binary. Its only Go dependency is a TOML parser;
-sonoscli remains a separate executable.
+sonoscli remains a separate executable. staticcheck and govulncheck are pinned
+in `go.mod` as development tools and are not compiled into the bridge.
 
 ## Build and run
 
@@ -183,7 +184,8 @@ Logs and `--check` output omit dictation text and Sonos source URLs.
 
 ```sh
 make test   # Tests and Go race detector; requires a C compiler
-make check  # go vet and gofmt
+make check  # go vet, gofmt, go mod tidy, and staticcheck
+make vuln   # govulncheck; needs network access
 make build  # Static binary with CGO disabled
 ```
 

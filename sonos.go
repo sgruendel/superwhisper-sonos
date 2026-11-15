@@ -104,7 +104,7 @@ func (c *sonosCLI) Status(ctx context.Context, target string) (speakerStatus, er
 		return status, err
 	}
 	if net.ParseIP(status.Device.IP) == nil || status.Device.UDN == "" || status.Transport.State == "" {
-		return status, fmt.Errorf("Sonos returned an incomplete device or transport state")
+		return status, fmt.Errorf("incomplete device or transport state from Sonos")
 	}
 	return status, nil
 }
@@ -117,7 +117,7 @@ func (c *sonosCLI) GroupVolume(ctx context.Context, target string) (int, error) 
 		return 0, err
 	}
 	if reply.Volume == nil || *reply.Volume < 0 || *reply.Volume > 100 {
-		return 0, fmt.Errorf("Sonos returned an invalid volume")
+		return 0, fmt.Errorf("invalid volume from Sonos")
 	}
 	return *reply.Volume, nil
 }
@@ -137,7 +137,7 @@ func (c *sonosCLI) GroupMute(ctx context.Context, target string) (bool, error) {
 		return false, err
 	}
 	if reply.Mute == nil {
-		return false, fmt.Errorf("Sonos returned no mute state")
+		return false, fmt.Errorf("no mute state from Sonos")
 	}
 	return *reply.Mute, nil
 }

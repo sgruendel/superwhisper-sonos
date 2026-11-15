@@ -100,7 +100,7 @@ func (m *monitor) read(ctx context.Context, last desiredState) (desiredState, er
 		return desiredState{}, nil
 	}
 	if status.SessionID == nil {
-		return desiredState{}, errors.New("Superwhisper returned no recording session ID")
+		return desiredState{}, errors.New("no recording session ID from Superwhisper")
 	}
 	if last.Active && last.Session == *status.SessionID {
 		return last, nil
