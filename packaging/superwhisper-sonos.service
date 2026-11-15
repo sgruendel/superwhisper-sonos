@@ -1,0 +1,15 @@
+[Unit]
+Description=Follow Superwhisper playback settings on Sonos
+After=superwhisper.service
+
+[Service]
+Type=simple
+Environment=PATH=%h/.local/bin:%h/go/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/superwhisper-sonos
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+
+[Install]
+WantedBy=default.target

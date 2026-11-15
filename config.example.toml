@@ -1,0 +1,9 @@
+# Sinuous's [core].devices list takes precedence when present.
+sinuous_config = "~/.config/sinuous/config.toml"
+
+# Fallback targets: IP addresses, DNS hostnames, or Sonos room names.
+# Configure these if you do not use Sinuous, for example ["Kitchen"].
+devices = []
+
+# Multiply the previous Sonos group volume by this factor for muffle/duck.
+volume_factor = 0.25
