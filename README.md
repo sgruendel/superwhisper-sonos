@@ -38,8 +38,7 @@ Ensure the installed `sonos` executable is on your `PATH`, then build:
 ```sh
 make build
 mkdir -p ~/.config/superwhisper-sonos
-# For a new installation; preserve your existing config when migrating.
-cp -n config.example.toml ~/.config/superwhisper-sonos/config.toml
+cp config.example.toml ~/.config/superwhisper-sonos/config.toml
 ```
 
 Configure devices as described below. Check the settings and speaker status
@@ -130,6 +129,9 @@ if it is still paused on the same source and coordinator. A reduced volume is
 restored only if it still matches the bridge's value, so manual volume changes
 win. Manual changes that produce exactly the bridge's volume or paused state
 cannot be distinguished.
+
+Superwhisper counts as lost after three consecutive failed checks, so a single
+slow reply does not resume and re-pause Sonos mid-recording.
 
 Every change is written to a private, atomic recovery journal before sending
 the command. This also covers a request whose response is lost after the
