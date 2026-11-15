@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -60,7 +61,7 @@ func (c *whisperSocket) call(ctx context.Context, command string, out any) error
 		return fmt.Errorf("decode Superwhisper %s: %w", command, err)
 	}
 	if envelope == nil {
-		return fmt.Errorf("no JSON object from Superwhisper")
+		return errors.New("no JSON object from Superwhisper")
 	}
 	if message := envelope["error"]; len(message) > 0 && string(message) != "null" {
 		return fmt.Errorf("%s request rejected by Superwhisper: %s", command, errorText(message))
@@ -75,12 +76,16 @@ func errorText(raw jsontext.Value) string {
 	if json.Unmarshal(raw, &text) != nil {
 		text = string(raw)
 	}
-	const limit = 200
-	if len(text) > limit {
-		// Drop a multi-byte character cut in half by the limit.
-		text = strings.ToValidUTF8(text[:limit], "") + "…"
+	return shorten(text, 200)
+}
+
+// shorten cuts s to at most limit bytes plus an ellipsis, dropping a
+// multi-byte character the cut splits.
+func shorten(s string, limit int) string {
+	if len(s) <= limit {
+		return s
 	}
-	return text
+	return strings.ToValidUTF8(s[:limit], "") + "…"
 }
 
 func (c *whisperSocket) Status(ctx context.Context) (whisperStatus, error) {
@@ -89,7 +94,7 @@ func (c *whisperSocket) Status(ctx context.Context) (whisperStatus, error) {
 		return status, err
 	}
 	if status.Phase == "" || (status.Phase == "recording" && status.SessionID == nil) {
-		return status, fmt.Errorf("incomplete recording state from Superwhisper")
+		return status, errors.New("incomplete recording state from Superwhisper")
 	}
 	return status, nil
 }
@@ -104,7 +109,7 @@ func (c *whisperSocket) Behavior(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if reply.Config.Behavior == "" {
-		return "", fmt.Errorf("no playback preference from Superwhisper")
+		return "", errors.New("no playback preference from Superwhisper")
 	}
 	return reply.Config.Behavior, nil
 }

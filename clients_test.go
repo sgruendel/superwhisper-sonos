@@ -130,7 +130,7 @@ func fakeSonosCLI(t *testing.T) *sonosCLI {
 	if err := os.WriteFile(path, []byte(`#!/bin/sh
 printf '%s\n' "$@" > "$SONOS_TEST_ARGS"
 if [ "$SONOS_TEST_FAIL" = 1 ]; then
-  echo 'speaker unavailable' >&2
+  printf '%s\n' "${SONOS_TEST_STDERR:-speaker unavailable}" >&2
   exit 1
 fi
 printf '%s\n' "$SONOS_TEST_REPLY"
@@ -203,6 +203,10 @@ func TestSonosCLIValidatesVolumeAndTransport(t *testing.T) {
 			t.Fatal("accepted invalid mute state", response)
 		}
 	}
+	t.Setenv("SONOS_TEST_REPLY", `{"device":{"ip":"","udn":""},"transport":{"State":""},"volume":0}`)
+	if _, err := c.Status(context.Background(), "192.0.2.1"); err == nil || err.Error() != "no Sonos speaker answered" {
+		t.Fatal("accepted empty status", err)
+	}
 	t.Setenv("SONOS_TEST_REPLY", `{"device":{"ip":"192.0.2.1","udn":"room-1"},"transport":{}}`)
 	if _, err := c.Status(context.Background(), "192.0.2.1"); err == nil {
 		t.Fatal("accepted missing transport state")
@@ -239,6 +243,41 @@ func TestCheckDoesNotWriteOrExposeSource(t *testing.T) {
 	var reply map[string]any
 	if err := json.Unmarshal(output.Bytes(), &reply); err != nil || reply["behavior"] != "muffle" {
 		t.Fatal(output.String(), err)
+	}
+}
+
+func TestCheckReportsUnreachableSpeakers(t *testing.T) {
+	f := newFakeSonos()
+	f.unreachable = "Garage"
+	w := &fakeWhisper{behavior: "pause"}
+	var output bytes.Buffer
+	cfg := config{Devices: []string{"Garage", "Office"}, VolumeFactor: 0.25}
+	err := checkStatus(context.Background(), f, w, cfg, &output)
+	if err == nil || err.Error() != "could not read 1 of 2 speakers" {
+		t.Fatal(err)
+	}
+	var reply struct {
+		Speakers []map[string]any `json:"speakers"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &reply); err != nil || len(reply.Speakers) != 2 {
+		t.Fatal(output.String(), err)
+	}
+	garage, office := reply.Speakers[0], reply.Speakers[1]
+	if garage["target"] != "Garage" || garage["error"] != "speaker offline" || garage["device"] != nil {
+		t.Error("unreachable speaker", garage)
+	}
+	if office["target"] != "Office" || office["state"] != "PLAYING" || office["error"] != nil {
+		t.Error("reachable speaker", office)
+	}
+}
+
+func TestSonosCLIShortensErrorOutput(t *testing.T) {
+	c := fakeSonosCLI(t)
+	t.Setenv("SONOS_TEST_FAIL", "1")
+	t.Setenv("SONOS_TEST_STDERR", "x"+strings.Repeat("ü", 200)) // 300 bytes splits a "ü"
+	err := c.Pause(context.Background(), "192.0.2.1")
+	if err == nil || !strings.HasSuffix(err.Error(), ": x"+strings.Repeat("ü", 149)+"…") {
+		t.Fatal(err)
 	}
 }
 

@@ -27,15 +27,18 @@ func defaultPaths() (paths, error) {
 	if err != nil {
 		return paths{}, err
 	}
-	configHome := envOr("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	stateHome := envOr("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
 	runtime := envOr("SUPERWHISPER_RUNTIME", filepath.Join(
 		envOr("XDG_RUNTIME_DIR", fmt.Sprintf("/run/user/%d", os.Getuid())), "superwhisper"))
 	return paths{
-		config: filepath.Join(configHome, "superwhisper-sonos", "config.toml"),
+		config: filepath.Join(configHome(home), "superwhisper-sonos", "config.toml"),
 		state:  filepath.Join(stateHome, "superwhisper-sonos", "recovery.json"),
 		socket: filepath.Join(runtime, "control.sock"),
 	}, nil
+}
+
+func configHome(home string) string {
+	return envOr("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 }
 
 func envOr(key, fallback string) string {
@@ -65,15 +68,14 @@ func loadConfig(path string) (config, error) {
 		return config{}, err
 	}
 	cfg := config{
-		VolumeFactor: 0.25,
-		SinuousConfig: filepath.Join(envOr("XDG_CONFIG_HOME", filepath.Join(home, ".config")),
-			"sinuous", "config.toml"),
+		VolumeFactor:  0.25,
+		SinuousConfig: filepath.Join(configHome(home), "sinuous", "config.toml"),
 	}
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return config{}, fmt.Errorf("read bridge config: %w", err)
 	}
 	if math.IsNaN(cfg.VolumeFactor) || cfg.VolumeFactor <= 0 || cfg.VolumeFactor >= 1 {
-		return config{}, fmt.Errorf("volume_factor must be greater than 0 and less than 1")
+		return config{}, errors.New("volume_factor must be greater than 0 and less than 1")
 	}
 	if cfg.SinuousConfig != "" {
 		cfg.SinuousConfig, err = expandHome(cfg.SinuousConfig)
@@ -94,11 +96,11 @@ func loadConfig(path string) (config, error) {
 		}
 	}
 	if len(cfg.Devices) == 0 {
-		return config{}, fmt.Errorf("configure core.devices in Sinuous or devices in the bridge config")
+		return config{}, errors.New("configure core.devices in Sinuous or devices in the bridge config")
 	}
 	for _, device := range cfg.Devices {
 		if strings.TrimSpace(device) == "" {
-			return config{}, fmt.Errorf("device names or addresses must not be empty")
+			return config{}, errors.New("device names or addresses must not be empty")
 		}
 	}
 	return cfg, nil

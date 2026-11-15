@@ -36,14 +36,14 @@ func (j journal) load() ([]action, error) {
 		return nil, fmt.Errorf("read recovery journal: %w", err)
 	}
 	if actions == nil {
-		return nil, fmt.Errorf("recovery journal must be an array")
+		return nil, errors.New("recovery journal must be an array")
 	}
 	for _, a := range actions {
 		if net.ParseIP(a.IP) == nil || a.UDN == "" || (a.Kind != "pause" && a.Kind != "volume" && a.Kind != "mute") {
-			return nil, fmt.Errorf("recovery journal contains an invalid action")
+			return nil, errors.New("recovery journal contains an invalid action")
 		}
 		if a.Kind == "volume" && (a.New < 1 || a.Old <= a.New || a.Old > 100) {
-			return nil, fmt.Errorf("recovery journal contains invalid volumes")
+			return nil, errors.New("recovery journal contains invalid volumes")
 		}
 	}
 	return actions, nil

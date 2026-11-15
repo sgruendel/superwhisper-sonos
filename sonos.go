@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
@@ -80,10 +81,7 @@ func (c *sonosCLI) call(ctx context.Context, target string, out any, args ...str
 		if ctx.Err() != nil {
 			return fmt.Errorf("sonos %s: %w", strings.Join(args, " "), ctx.Err())
 		}
-		detail := strings.TrimSpace(stderr.String())
-		if len(detail) > 300 {
-			detail = detail[:300]
-		}
+		detail := shorten(strings.TrimSpace(stderr.String()), 300)
 		return fmt.Errorf("sonos %s: %w: %s", strings.Join(args, " "), err, detail)
 	}
 	if out == nil {
@@ -103,8 +101,12 @@ func (c *sonosCLI) Status(ctx context.Context, target string) (speakerStatus, er
 	if err := c.call(ctx, target, &status, "status"); err != nil {
 		return status, err
 	}
+	// sonoscli exits successfully with an empty status when no speaker answers.
+	if status.Device.IP == "" && status.Device.UDN == "" {
+		return status, errors.New("no Sonos speaker answered")
+	}
 	if net.ParseIP(status.Device.IP) == nil || status.Device.UDN == "" || status.Transport.State == "" {
-		return status, fmt.Errorf("incomplete device or transport state from Sonos")
+		return status, errors.New("incomplete device or transport state from Sonos")
 	}
 	return status, nil
 }
@@ -117,14 +119,14 @@ func (c *sonosCLI) GroupVolume(ctx context.Context, target string) (int, error) 
 		return 0, err
 	}
 	if reply.Volume == nil || *reply.Volume < 0 || *reply.Volume > 100 {
-		return 0, fmt.Errorf("invalid volume from Sonos")
+		return 0, errors.New("invalid volume from Sonos")
 	}
 	return *reply.Volume, nil
 }
 
 func (c *sonosCLI) SetGroupVolume(ctx context.Context, target string, volume int) error {
 	if volume < 0 || volume > 100 {
-		return fmt.Errorf("volume must be between 0 and 100")
+		return errors.New("volume must be between 0 and 100")
 	}
 	return c.call(ctx, target, nil, "group", "volume", "set", strconv.Itoa(volume))
 }
@@ -137,7 +139,7 @@ func (c *sonosCLI) GroupMute(ctx context.Context, target string) (bool, error) {
 		return false, err
 	}
 	if reply.Mute == nil {
-		return false, fmt.Errorf("no mute state from Sonos")
+		return false, errors.New("no mute state from Sonos")
 	}
 	return *reply.Mute, nil
 }

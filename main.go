@@ -52,7 +52,7 @@ func execute(args []string, stdout, stderr io.Writer, log *slog.Logger) error {
 		return err
 	}
 	if *check && *restore {
-		return fmt.Errorf("--check and --restore cannot be combined")
+		return errors.New("--check and --restore cannot be combined")
 	}
 	binary, err := exec.LookPath(*sonosPath)
 	if err != nil {
@@ -138,9 +138,11 @@ func checkStatus(ctx context.Context, sonos sonosClient, whisper whisperClient, 
 		return err
 	}
 	type speakerSummary struct {
-		Device device `json:"device"`
-		State  string `json:"state"`
-		Volume *int   `json:"volume"`
+		Target string `json:"target"`
+		Device device `json:"device,omitzero"`
+		State  string `json:"state,omitzero"`
+		Volume *int   `json:"volume,omitzero"`
+		Error  string `json:"error,omitzero"`
 	}
 	reply := struct {
 		Behavior     string           `json:"behavior"`
@@ -148,14 +150,23 @@ func checkStatus(ctx context.Context, sonos sonosClient, whisper whisperClient, 
 		VolumeFactor float64          `json:"volume_factor"`
 		Speakers     []speakerSummary `json:"speakers"`
 	}{Behavior: behavior, Devices: cfg.Devices, VolumeFactor: cfg.VolumeFactor}
+	// An unreachable speaker is reported in place so it does not hide the others.
+	failed := 0
 	for _, target := range cfg.Devices {
-		status, err := sonos.Status(ctx, target)
-		if err != nil {
-			return err
+		summary := speakerSummary{Target: target}
+		if status, err := sonos.Status(ctx, target); err != nil {
+			failed++
+			summary.Error = err.Error()
+		} else {
+			summary.Device, summary.State, summary.Volume = status.Device, status.Transport.State, status.Volume
 		}
-		reply.Speakers = append(reply.Speakers, speakerSummary{
-			Device: status.Device, State: status.Transport.State, Volume: status.Volume,
-		})
+		reply.Speakers = append(reply.Speakers, summary)
 	}
-	return json.MarshalEncode(jsontext.NewEncoder(out, jsontext.WithIndent("  ")), reply)
+	if err := json.MarshalEncode(jsontext.NewEncoder(out, jsontext.WithIndent("  ")), reply); err != nil {
+		return err
+	}
+	if failed > 0 {
+		return fmt.Errorf("could not read %d of %d speakers", failed, len(cfg.Devices))
+	}
+	return nil
 }

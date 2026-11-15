@@ -49,6 +49,8 @@ without changing playback:
 ./bin/superwhisper-sonos --check
 ```
 
+An unreachable speaker is listed with its error, and the command exits nonzero.
+
 For a foreground session:
 
 ```sh

@@ -25,6 +25,7 @@ type fakeSonos struct {
 	muted        bool
 	writes       []string
 	offline      bool
+	unreachable  string // target whose status requests fail
 	failWrite    bool
 	beforePause  func()
 	beforeStatus func(context.Context)
@@ -38,7 +39,7 @@ func newFakeSonos() *fakeSonos {
 	return f
 }
 
-func (f *fakeSonos) Status(ctx context.Context, _ string) (speakerStatus, error) {
+func (f *fakeSonos) Status(ctx context.Context, target string) (speakerStatus, error) {
 	if f.beforeStatus != nil {
 		f.beforeStatus(ctx)
 	}
@@ -47,7 +48,7 @@ func (f *fakeSonos) Status(ctx context.Context, _ string) (speakerStatus, error)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.offline {
+	if f.offline || target == f.unreachable {
 		return speakerStatus{}, errors.New("speaker offline")
 	}
 	return f.status, nil
