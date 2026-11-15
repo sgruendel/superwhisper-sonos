@@ -21,14 +21,17 @@ type monitor struct {
 	log               *slog.Logger
 	pollInterval      time.Duration
 	reconnectInterval time.Duration
-	events            chan struct{}
-	mu                sync.RWMutex
-	desired           desiredState
+	// Consecutive failed polls before Superwhisper counts as gone. A single
+	// slow reply must not resume Sonos mid-recording and pause it again.
+	lostAfter int
+	events    chan struct{}
+	mu        sync.RWMutex
+	desired   desiredState
 }
 
 func newMonitor(whisper whisperClient, log *slog.Logger) *monitor {
 	return &monitor{whisper: whisper, log: log, pollInterval: 200 * time.Millisecond,
-		reconnectInterval: time.Second, events: make(chan struct{}, 1)}
+		reconnectInterval: time.Second, lostAfter: 3, events: make(chan struct{}, 1)}
 }
 
 func (m *monitor) snapshot() desiredState {
@@ -57,25 +60,28 @@ func (m *monitor) current(ctx context.Context, desired desiredState) bool {
 func (m *monitor) run(ctx context.Context) {
 	defer m.set(desiredState{})
 	var last desiredState
-	failed := false
+	failures := 0
 	for ctx.Err() == nil {
 		next, err := m.read(ctx, last)
 		interval := m.pollInterval
 		if err != nil {
-			last = desiredState{}
-			m.set(last)
-			interval = m.reconnectInterval
-			if !failed && ctx.Err() == nil {
-				m.log.Info("Waiting for Superwhisper; restoring any Sonos changes")
+			// Below the threshold, keep the last state and retry at the normal pace.
+			failures++
+			if failures >= m.lostAfter {
+				last = desiredState{}
+				m.set(last)
+				interval = m.reconnectInterval
+				if failures == m.lostAfter && ctx.Err() == nil {
+					m.log.Info("Waiting for Superwhisper; restoring any Sonos changes", "error", err)
+				}
 			}
-			failed = true
 		} else {
-			last = next
-			m.set(next)
-			if failed {
+			if failures >= m.lostAfter {
 				m.log.Info("Superwhisper reconnected")
 			}
-			failed = false
+			failures = 0
+			last = next
+			m.set(next)
 		}
 		select {
 		case <-ctx.Done():

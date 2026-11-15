@@ -14,13 +14,17 @@ type fakeWhisper struct {
 	session       int64
 	behavior      string
 	offline       bool
+	failNext      int
+	statusReads   int
 	behaviorReads int
 }
 
 func (f *fakeWhisper) Status(context.Context) (whisperStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.offline {
+	f.statusReads++
+	if f.offline || f.failNext > 0 {
+		f.failNext = max(0, f.failNext-1)
 		return whisperStatus{}, errors.New("disconnected")
 	}
 	session := f.session
@@ -74,6 +78,33 @@ func TestMonitorReadsPreferencePerSessionAndHandlesDisconnect(t *testing.T) {
 	f.offline = false
 	f.mu.Unlock()
 	waitFor(t, func() bool { return m.snapshot().Active })
+}
+
+func TestMonitorToleratesTransientFailures(t *testing.T) {
+	f := &fakeWhisper{phase: "recording", session: 1, behavior: "pause"}
+	m := fastMonitor(f)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); m.run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	want := desiredState{true, 1, "pause"}
+	waitFor(t, func() bool { return m.snapshot() == want })
+	f.mu.Lock()
+	f.failNext = m.lostAfter - 1
+	start := f.statusReads
+	f.mu.Unlock()
+	// Wait for the failures plus two successful polls.
+	waitFor(t, func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.statusReads >= start+m.lostAfter+1
+	})
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	// Clearing the session would have re-read the preference for it.
+	if m.snapshot() != want || f.behaviorReads != 1 {
+		t.Fatal("transient failures ended the recording", m.snapshot(), f.behaviorReads)
+	}
 }
 
 func startTestWorker(t *testing.T, b *bridge, m *monitor, cfg config) func() {
